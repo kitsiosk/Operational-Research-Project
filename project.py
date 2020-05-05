@@ -1,92 +1,43 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[2]:
-
-
 from __future__ import division
 from pyomo.environ import *
 from pyomo.opt import SolverFactory
 import numpy as np
 import time
 
-
-# ## Model
-# ___
-
-# In[3]:
-
-
 # Define abstract model
 model = ConcreteModel()
-
-
-# ## Variables
-# ___
-
-# In[4]:
 
 
 # I ranges from 1 to 18
 model.N = 18
 model.I = RangeSet(1, model.N)
 
-
-# In[5]:
-
-
 # II ranges from 1 to 9
 model.n = 9
 model.II = RangeSet(1, model.n)
 
-
-# In[6]:
-
-
 model.J = RangeSet(1, model.n - 1)
-
-
-# In[7]:
-
 
 # x is the weekly supply
 model.x = Var(model.I, domain=NonNegativeIntegers)
 
-
-# In[8]:
-
-
 # m is the max between the two types each week
 model.m = Var(model.II, domain=NonNegativeIntegers)
 
-
-# In[9]:
-
-
 # b is boolean: 0=> typeA | 1=> typeB
 model.b = Var(model.II, domain=Binary)
-
-
-# In[10]:
-
 
 # x is boolean: The XOR of b_i and b_(i-1) implemented with max
 model.c = Var(model.II, domain=Binary)
 
 
 # ## Parameters
-# ___
-
-# In[11]:
-
-
 model.y = np.array([-1, 55, 55, 44, 0, 45, 45, 36, 35, 35, 38, 38, 30, 0, 48, 48, 58, 57, 58])
 
-
-# In[12]:
-
-
-# k is the cost
+# k is the cost(with k[0]=0 because we want indices from 1 to 18)
 coeff = np.zeros((19))
 for i in range(1, 10):
     coeff[i] = 225
@@ -95,11 +46,6 @@ model.k = coeff
 
 
 # ## Objective
-# ___
-
-# In[27]:
-
-
 def get_objective(model):
     obj = sum(
         model.k[i]*model.x[i] + model.k[i+9]*model.x[i+9] + 
@@ -110,18 +56,10 @@ def get_objective(model):
     )
     return obj
 
-
-# In[28]:
-
-
 model.OBJ = Objective(rule=get_objective)
 
 
 # ## Constraints
-# ___
-
-# In[15]:
-
 
 # Big-M value
 M = 10e5
@@ -137,10 +75,6 @@ def maxConstraint4(model, i):
 def maxConstraint5(model, i):
     return model.m[i] == model.x[i] + model.x[i+9]
 
-
-# In[16]:
-
-
 # Upper bounds
 # Below constraings are called with I=1,..,9
 def ubConstraint1(model, i):
@@ -148,19 +82,11 @@ def ubConstraint1(model, i):
 def ubConstraint2(model, i):
     return model.x[i+9] <= 80
 
-
-# In[17]:
-
-
 # Stock rules
 def stockConstraint1(model, i):
-    return sum(model.x[k] - model.y[k] for k in range(1, i)) + 125 >= model.x[i+1]
+    return sum(model.x[k] - model.y[k] for k in range(1, i)) + 125 >= 0.8*model.x[i+1]
 def stockConstraint2(model, i):
-    return sum(model.x[k] - model.y[k] for k in range(10, i + 10)) + 143 >= model.x[10+i]
-
-
-# In[19]:
-
+    return sum(model.x[k] - model.y[k] for k in range(10, i + 10)) + 143 >= 0.8*model.x[10+i]
 
 # The below constraints set  c[i] = max{b[i], b[i-1]}
 # to be used only inside minimization objective
@@ -194,9 +120,13 @@ model.corConstraint2 = Constraint(model.II, rule=xorConstraint2)
 opt = SolverFactory('glpk')
 results = opt.solve(model)
 
-for v in model.component_objects(Var, active=True):
-    print ("Variable",v)
-    varobject = getattr(model, str(v))
-    for index in varobject:
-        print ("   ",index, varobject[index].value)
+# Print the results
+#
+# Print values for all variables
+#
+print("Print values for all variables")
+for v in model.component_data_objects(Var):
+	print(str(v), v.value)
+print("Objective value:")
+print(model.OBJ.expr())
 
