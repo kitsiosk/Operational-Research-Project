@@ -1,16 +1,16 @@
 #!/usr/bin/env python
 # coding: utf-8
-
 from __future__ import division
 from pyomo.environ import *
-from pyomo.opt import SolverFactory
 import numpy as np
-import time
 
-# Define abstract model
+
+# ## Model
+# Define concrete model
 model = ConcreteModel()
 
 
+# ## Variables
 # I ranges from 1 to 18
 model.N = 18
 model.I = RangeSet(1, model.N)
@@ -20,24 +20,21 @@ model.n = 9
 model.II = RangeSet(1, model.n)
 
 model.J = RangeSet(1, model.n - 1)
-
 # x is the weekly supply
 model.x = Var(model.I, domain=NonNegativeIntegers)
-
 # m is the max between the two types each week
 model.m = Var(model.II, domain=NonNegativeIntegers)
-
 # b is boolean: 0=> typeA | 1=> typeB
 model.b = Var(model.II, domain=Binary)
-
 # x is boolean: The XOR of b_i and b_(i-1) implemented with max
 model.c = Var(model.II, domain=Binary)
 
 
 # ## Parameters
+
 model.y = np.array([-1, 55, 55, 44, 0, 45, 45, 36, 35, 35, 38, 38, 30, 0, 48, 48, 58, 57, 58])
 
-# k is the cost(with k[0]=0 because we want indices from 1 to 18)
+# k is the cost
 coeff = np.zeros((19))
 for i in range(1, 10):
     coeff[i] = 225
@@ -50,8 +47,8 @@ def get_objective(model):
     obj = sum(
         model.k[i]*model.x[i] + model.k[i+9]*model.x[i+9] + 
         model.c[i]*500 + 
-        (sum(model.x[k] - model.y[k] for k in range(1, i)) + 125)*225*0.195/52 +  
-        (sum(model.x[k+9] - model.y[k+9] for k in range(1, i)) + 143)* 310*0.195/52
+        (sum(model.x[k] - model.y[k] for k in range(1, i+1)) + 125)*225*0.195/52 +  
+        (sum(model.x[k+9] - model.y[k+9] for k in range(1, i+1)) + 143)* 310*0.195/52
         for i in range(1, model.n)
     )
     return obj
@@ -82,11 +79,12 @@ def ubConstraint1(model, i):
 def ubConstraint2(model, i):
     return model.x[i+9] <= 80
 
+
 # Stock rules
 def stockConstraint1(model, i):
-    return sum(model.x[k] - model.y[k] for k in range(1, i)) + 125 >= 0.8*model.x[i+1]
+    return sum(model.x[k] - model.y[k] for k in range(1, i+1)) + 125 >= model.y[i+1]
 def stockConstraint2(model, i):
-    return sum(model.x[k] - model.y[k] for k in range(10, i + 10)) + 143 >= 0.8*model.x[10+i]
+    return sum(model.x[k] - model.y[k] for k in range(10, i + 10)) + 143 >= model.y[10+i]
 
 # The below constraints set  c[i] = max{b[i], b[i-1]}
 # to be used only inside minimization objective
@@ -117,16 +115,18 @@ model.stockConstraint2 = Constraint(model.J, rule=stockConstraint2)
 model.xorConstraint1 = Constraint(model.II, rule=xorConstraint1)
 model.corConstraint2 = Constraint(model.II, rule=xorConstraint2)
 
+
 opt = SolverFactory('glpk')
 results = opt.solve(model)
 
-# Print the results
-#
-# Print values for all variables
-#
-print("Print values for all variables")
+print('Parameter values:')
 for v in model.component_data_objects(Var):
-	print(str(v), v.value)
-print("Objective value:")
+  print(str(v), v.value)
+  
+print('Objective value:')
 print(model.OBJ.expr())
+
+
+
+
 
